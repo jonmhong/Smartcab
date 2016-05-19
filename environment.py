@@ -1,6 +1,6 @@
 import time
 import random
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 
 from simulator import Simulator
 
@@ -145,7 +145,13 @@ class Environment(object):
                 if left != 'forward':  # we don't want to override left == 'forward'
                     left = other_heading
 
-        return {'light': light, 'oncoming': oncoming, 'left': left, 'right': right}  # TODO: make this a namedtuple
+        # TODO: make this a namedtuple
+        #return {'light': light, 'oncoming': oncoming, 'left': left, 'right': right}
+        Surroundings = namedtuple('Intersection State', 'light oncoming left right')
+        named_states = Surroundings(light, oncoming, left, right)
+        
+        return named_states
+        
 
     def get_deadline(self, agent):
         return self.agent_states[agent]['deadline'] if agent is self.primary_agent else None
