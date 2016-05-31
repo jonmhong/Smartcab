@@ -10,14 +10,21 @@ class TrafficLight(object):
     valid_states = [True, False]  # True = NS open, False = EW open
 
     def __init__(self, state=None, period=None):
+        # state of the traffic light
+        # if state is given, set the variable, else randomly choose between True or False
         self.state = state if state is not None else random.choice(self.valid_states)
+        # if period is given, set the variable, else choose between 3 to 5 seconds
         self.period = period if period is not None else random.choice([3, 4, 5])
+        # last updated is initialized to zero
         self.last_updated = 0
 
     def reset(self):
+        # resets the traffic light timer
         self.last_updated = 0
 
     def update(self, t):
+        # when the traffic light is on longer than the randomly chosen time
+        # change the state
         if t - self.last_updated >= self.period:
             self.state = not self.state  # assuming state is boolean
             self.last_updated = t
@@ -25,12 +32,16 @@ class TrafficLight(object):
 
 class Environment(object):
     """Environment within which all agents operate."""
-
+    
+    # actions are the names of the movments
+    # inputs are the combinations of movements in the environment
+    # the headings are the L R D U coordinate movements
     valid_actions = [None, 'forward', 'left', 'right']
     valid_inputs = {'light': TrafficLight.valid_states, 'oncoming': valid_actions, 'left': valid_actions, 'right': valid_actions}
-    valid_headings = [(1, 0), (0, -1), (-1, 0), (0, 1)]  # ENWS
+    valid_headings = [(1, 0), (0, -1), (-1, 0), (0, 1)]  # ENWS, if (0, 0) is location top left
 
     def __init__(self):
+        
         self.done = False
         self.t = 0
         self.agent_states = OrderedDict()
@@ -42,9 +53,10 @@ class Environment(object):
         self.block_size = 100
         self.intersections = OrderedDict()
         self.roads = []
+
         for x in xrange(self.bounds[0], self.bounds[2] + 1):
             for y in xrange(self.bounds[1], self.bounds[3] + 1):
-                self.intersections[(x, y)] = TrafficLight()  # a traffic light at each intersection
+                self.intersections[(x, y)] = TrafficLight()
 
         for a in self.intersections:
             for b in self.intersections:
@@ -55,7 +67,7 @@ class Environment(object):
 
         # Dummy agents
         self.num_dummies = 3  # no. of dummy agents
-        for i in xrange(self.num_dummies):
+        for i in xrange(self.num_dummies):        
             self.create_agent(DummyAgent)
 
         # Primary agent
@@ -145,13 +157,8 @@ class Environment(object):
                 if left != 'forward':  # we don't want to override left == 'forward'
                     left = other_heading
 
-        # TODO: make this a namedtuple
-        #return {'light': light, 'oncoming': oncoming, 'left': left, 'right': right}
-        Surroundings = namedtuple('Intersection State', 'light oncoming left right')
-        named_states = Surroundings(light, oncoming, left, right)
-        
-        return named_states
-        
+        return {'light': light, 'oncoming': oncoming, 'left': left, 'right': right} # TODO: make this a namedtuple
+
 
     def get_deadline(self, agent):
         return self.agent_states[agent]['deadline'] if agent is self.primary_agent else None
@@ -231,17 +238,23 @@ class Agent(object):
 
 
 class DummyAgent(Agent):
+    # create a list of colors that the DummyAgent can be
     color_choices = ['blue', 'cyan', 'magenta', 'orange']
 
     def __init__(self, env):
+        # if the instance is a DummyAgent, set these instance variables
         super(DummyAgent, self).__init__(env)  # sets self.env = env, state = None, next_waypoint = None, and a default color
+        # sets the next move as either forward, left, or right
         self.next_waypoint = random.choice(Environment.valid_actions[1:])
+        # pick a random color for the DummyAgent
         self.color = random.choice(self.color_choices)
 
     def update(self, t):
+        # updates the location of the DummyAgent
         inputs = self.env.sense(self)
 
         action_okay = True
+
         if self.next_waypoint == 'right':
             if inputs['light'] == 'red' and inputs['left'] == 'forward':
                 action_okay = False
