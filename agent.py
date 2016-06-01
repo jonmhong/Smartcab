@@ -12,9 +12,6 @@ class LearningAgent(Agent):
         self.planner = RoutePlanner(self.env, self)  # simple route planner to get next_waypoint
         
         # TODO: Initialize any additional variables here
-        self.location = self.env.agent_states[self]['location']
-        self.heading = self.env.agent_states[self]['heading']
-        self.light = self.env.sense(self)['light']
         self.q_table = {}
         
         initialize_q = 12
@@ -22,12 +19,13 @@ class LearningAgent(Agent):
         for move in self.env.valid_actions:
             self.possible_actions[move] = initialize_q
         
+        self.breaking_law_tally = 0
+        self.total_moves = 0
 
     def reset(self, destination=None):
         self.planner.route_to(destination)
         # TODO: Prepare for a new trip; reset any variables here, if required
 
-        self.state = (self.location, self.heading, self.light)
         self.destination = self.planner.destination
         # objective: choose what variables are necessary in the state
         
@@ -38,36 +36,64 @@ class LearningAgent(Agent):
         inputs = self.env.sense(self)
         deadline = self.env.get_deadline(self)
         
+        previous_state = self.state
+        
         # TODO: Update state
         # create state entry in q_table as the agent explores a new state
+        self.location = self.env.agent_states[self]['location']
+        self.heading = self.env.agent_states[self]['heading']
+        self.light = self.env.sense(self)['light']
+        self.state = (self.location, self.heading, self.light)
+        
+        
+        # tweak these variables
+        gamma = 0.5 # discounting rate 
+        alpha = 0.1 # learning rate to update q-value
+        epsilon = 0.05 # chance of choosing a random action for simulated annealing
+        
         if self.state is not None and self.state not in self.q_table:
             self.q_table[self.state] = self.possible_actions
-        else:
+        #else:
             # TODO*: update q-table rewards, according to state and action
-            pass
-        self.state = (self.location, self.heading, self.light)
-
+        #    pass
         
         # TODO: Select action according to your policy
         action = None
-        epsilon = 0.1
         
-        # take action according to highest q_value
-        # else take a random action, according to epsilon
-        # this is where I left off
         for move, q_value in self.q_table[self.state].iteritems():
             max_q_value = max(self.q_table[self.state].values())
             if q_value == max_q_value and max_q_value > 0:
-                action = move
+                policy = move
+                if random.random() > epsilon:
+                    action = move
+                else:
+                    action = random.choice(self.env.valid_actions)
             else:
                 action = random.choice(self.env.valid_actions)
+        
 
         # Execute action and get reward
         reward = self.env.act(self, action)
         self.q_table[self.state][action] = reward
+        
+        # set alpha, then decay it over time
+        
 
         # TODO: Learn policy based on state, action, reward
-        print self.q_table
+        # utility function
+        if previous_state is not None:
+            if (previous_state[2] == 'red') and (self.state[0] != previous_state[0]):
+                self.breaking_law_tally += 1
+        self.total_moves += 1
+        
+        
+        #q_hat = ((1 - alpha) * self.q_table[state][action]) + (alpha * (gamma * sum(policy)))
+        
+        print "previous state: {}".format(previous_state)
+        print "current state: {}".format(self.state)
+        print "illegal moves tally: {}".format(self.breaking_law_tally)
+        print "total moves: {}".format(self.total_moves)
+        
         print "LearningAgent.update(): deadline = {}, inputs = {}, action = {}, reward = {}".format(deadline, inputs, action, reward)  # [debug]
 
 
