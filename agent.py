@@ -3,6 +3,10 @@ from environment import Agent, Environment
 from planner import RoutePlanner
 from simulator import Simulator
 
+# these are used to analyze the agent's results 
+import matplotlib.pyplot as pl
+import numpy as np
+
 class LearningAgent(Agent):
     """An agent that learns to drive in the smartcab world."""
 
@@ -12,23 +16,31 @@ class LearningAgent(Agent):
         self.planner = RoutePlanner(self.env, self)  # simple route planner to get next_waypoint
         
         # TODO: Initialize any additional variables here
+        # setting up the q_table
         self.q_table = {}
-        
+        self.initial_q = 12        
         self.possible_actions = {}
         for move in self.env.valid_actions:
-            self.possible_actions[move] = 12
-            
-        print "initialize: self.possible_actions: {}".format(self.possible_actions)
-        
+            self.possible_actions[move] = self.initial_q
+
+        # these are variables to remember the previous state and action (for q-learning)
         self.previous_action = None
         self.previous_state = None
         
+        # these are debugging variables
+        self.list_of_actions = []
+        self.success_rate = 0
+        self.run_trial = 1
+        self.successful_runs = []
+
 
     def reset(self, destination=None):
         self.planner.route_to(destination)
         # TODO: Prepare for a new trip; reset any variables here, if required
         self.destination = self.planner.destination
-        # objective: choose what variables are necessary in the state
+        self.previous_action = None
+        self.previous_state = None
+        self.run_trial += 1
         
         
     def update(self, t):   
@@ -36,63 +48,92 @@ class LearningAgent(Agent):
         self.next_waypoint = self.planner.next_waypoint()  # from route planner, also displayed by simulator
         inputs = self.env.sense(self)
         deadline = self.env.get_deadline(self)
-                
+
         # TODO: Update state
-        self.location = self.env.agent_states[self]['location']
+        # objective: choose what variables are necessary in the state
+        self.location = self.env.agent_states[self]['location'] # hypothesis: this doesn't matter
         self.heading = self.env.agent_states[self]['heading']
         self.light = self.env.sense(self)['light']
-        state = (self.location, self.next_waypoint, self.light) # add cars later
+        # detects if there's any other cars in the intersection
+        left = self.env.sense(self)['left']
+        right = self.env.sense(self)['right']
+        oncoming = self.env.sense(self)['oncoming']
+        
+        # True if there's another car in the same intersection
+        car_in_int = not ((left or right or oncoming) is None)
+        
+        state = (self.next_waypoint, self.light)
 
         # adjust these parameters
-        gamma = 0.9 # discounting rate
-        epsilon = 0.1 # chance of choosing a random action
-        
-        if t == 0:
+        gamma = 0.7 ** self.run_trial # discounting rate
+        #alpha: learning rate
+
+        # decay the learning rate
+        if self.run_trial <= 1:
             alpha = 1
+            epsilon = 1
         else:
-            alpha = 1.0 / t        
-        
-        #BUG BUG BUG BUG BUG BUG BUG BUG BUG BUG BUG BUG BUG BUG BUG BUG BUG BUG
-        # there's a bug with updating nested dictionary values
+            alpha = 1.0 / self.run_trial
+            epsilon = 1.0 / self.run_trial
+            
         
         if (state is not None) and (state not in self.q_table):
             # set the q-values to zero
-            self.q_table[state] = {'forward': 0, 'left': 0, 'right': 0, None: 0}
+            self.q_table[state] = {'forward': self.initial_q, 'left': self.initial_q, 
+                                   'right': self.initial_q, None: self.initial_q}
 
         # TODO: Select action according to your policy
         action = None
         
-        if random.random() > epsilon and (0 not in self.q_table[state].values()):
-            action = max(self.q_table[state])
+        # choose a random action epsilon percent of the time, else choose highest q-value action
+        if random.random() > epsilon: #and (self.initial_q not in self.q_table[state].values()):
+            for a, q in self.q_table[state].iteritems():
+                if q == max(self.q_table[state].values()):
+                    action = a
         else:
             action = random.choice(self.possible_actions.keys())
-        
-        reward = self.env.act(self, action)
-        
-        # TODO: Learn policy based on state, action, reward
-        q_val_f = self.q_table[state]['forward']
-        q_val_l = self.q_table[state]['left']
-        q_val_r = self.q_table[state]['right']
-        q_val_n = self.q_table[state][None]
-        q_hat = None
-        
-        max_q = max([q_val_f, q_val_l, q_val_r, q_val_n])
-        
-        if self.q_table[state][action] == 0:
-            # if the state, action has never been taken, reward == q-value
-            self.q_table[state][action] = reward
-        else:
-            q_hat = ((1 - alpha) * self.q_table[self.previous_state][action]) + (alpha * (reward + gamma * max_q))
-            self.q_table[self.previous_state][action] = q_hat
-                
-        self.previous_state = state
-        
-        print "LearningAgent.update(): deadline = {}, inputs = {}, action = {}, reward = {}".format(deadline, inputs, action, reward)  # [debug]
-        print self.q_table
-        print self.possible_actions
-        print action
-        print state
 
+        reward = self.env.act(self, action)
+
+        # TODO: Learn policy based on state, action, reward
+        q_hat = None
+        max_q = max(self.q_table[state].values())
+
+        ### IMPLEMENT GAME THEORY
+        # optimize the policy by implementing game theory
+        # find the expected result in the situation
+        #if left or right or oncoming in ['left', 'right', 'oncoming']:
+            #agent needs to find a strategy based on 
+            # 1 if there's a car in the intersection
+            # 2 determining the maximin strategy in the intersection
+        
+        ### IMPLEMENT GAME THEORY
+        
+        # calculate the q-value, as long as it is not in the initial state
+        if self.previous_state is not None:
+            v = self.q_table[self.previous_state][self.previous_action]
+            x = reward + gamma * max_q
+            q_hat = ((1 - alpha) * v) + (alpha * x)
+            
+            if q_hat is not None:
+                self.q_table[self.previous_state][self.previous_action] = q_hat
+                
+            print "state: {}".format(state)
+            print "action: {}".format(action)
+            print "reward: {}".format(reward)
+        
+        # save previous state and action to use for q-learning equation
+        self.previous_state = state
+        self.previous_action = action
+
+        # observing results for debugging
+        self.list_of_actions.append((action, self.light))        
+        if self.env.done == True:
+            self.success_rate += 1     
+            self.successful_runs.append(self.run_trial)
+            
+        print "LearningAgent.update(): deadline = {}, inputs = {}, action = {}, reward = {}".format(deadline, inputs, action, reward)  # [debug]
+        
 
 def run():
     """Run the agent for a finite number of trials."""
@@ -103,8 +144,30 @@ def run():
     e.set_primary_agent(a, enforce_deadline=True)  # set agent to track
 
     # Now simulate it
-    sim = Simulator(e, update_delay=0.1)  # reduce update_delay to speed up simulation
-    sim.run(n_trials=10)  # press Esc or close pygame window to quit
+    sim = Simulator(e, update_delay=0)  # reduce update_delay to speed up simulation
+    sim.run(n_trials=100)  # press Esc or close pygame window to quit    
+
+    
+    def plot_success(successful_runs):
+        x = range(0, 101)
+        y = np.zeros(len(x))
+        for x_coord in x:
+            if x_coord in successful_runs:
+                y[x_coord] = 1
+        pl.figure()
+        pl.title("Successful Runs")
+        pl.hist(successful_runs, 
+                bins=len(x),
+                range())
+        pl.xlabel("Trial Run Number")
+        pl.ylabel("Success (binary)")
+        pl.show()
+
+    print a.q_table
+    print a.list_of_actions    
+    print a.successful_runs
+    print len(a.successful_runs)
+    print plot_success(a.successful_runs)
 
 
 if __name__ == '__main__':
