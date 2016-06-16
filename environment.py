@@ -75,15 +75,18 @@ class Environment(object):
         self.enforce_deadline = False
 
     def create_agent(self, agent_class, *args, **kwargs):
+        # creates the dummy agents
         agent = agent_class(self, *args, **kwargs)
         self.agent_states[agent] = {'location': random.choice(self.intersections.keys()), 'heading': (0, 1)}
         return agent
 
     def set_primary_agent(self, agent, enforce_deadline=False):
+        # creates the learning agent
         self.primary_agent = agent
         self.enforce_deadline = enforce_deadline
 
     def reset(self):
+        # resets a new trial, after a series of runs
         self.done = False
         self.t = 0
 
@@ -132,6 +135,7 @@ class Environment(object):
             self.agent_states[self.primary_agent]['deadline'] -= 1
 
     def sense(self, agent):
+        # senses the environment at the intersection
         assert agent in self.agent_states, "Unknown agent!"
 
         state = self.agent_states[agent]
@@ -164,6 +168,7 @@ class Environment(object):
         return self.agent_states[agent]['deadline'] if agent is self.primary_agent else None
 
     def act(self, agent, action):
+        # returns the reward
         assert agent in self.agent_states, "Unknown agent!"
         assert action in self.valid_actions, "Invalid action!"
 

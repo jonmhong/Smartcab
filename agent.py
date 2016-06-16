@@ -26,12 +26,11 @@ class LearningAgent(Agent):
         # these are variables to remember the previous state and action (for q-learning)
         self.previous_action = None
         self.previous_state = None
-        
+
         # these are debugging variables
-        self.list_of_actions = []
-        self.success_rate = 0
-        self.run_trial = 1
         self.successful_runs = []
+        self.success_tally = 0
+        self.run_trial = 1
 
 
     def reset(self, destination=None):
@@ -54,29 +53,24 @@ class LearningAgent(Agent):
         self.location = self.env.agent_states[self]['location'] # hypothesis: this doesn't matter
         self.heading = self.env.agent_states[self]['heading']
         self.light = self.env.sense(self)['light']
-        # detects if there's any other cars in the intersection
-        left = self.env.sense(self)['left']
-        right = self.env.sense(self)['right']
-        oncoming = self.env.sense(self)['oncoming']
         
-        # True if there's another car in the same intersection
-        car_in_int = not ((left or right or oncoming) is None)
-        
+        """
+        1 self.next_waypoint is important for the smartcar to know what direction to head towards
+        2 The smartcar should know the state of the light when it is rewarded
+        """
         state = (self.next_waypoint, self.light)
 
-        # adjust these parameters
-        gamma = 0.7 ** self.run_trial # discounting rate
-        #alpha: learning rate
+        gamma = 0.7 ** self.run_trial # discount rate
 
-        # decay the learning rate
+        # decay the learning rate and epsilon
         if self.run_trial <= 1:
             alpha = 1
             epsilon = 1
         else:
             alpha = 1.0 / self.run_trial
             epsilon = 1.0 / self.run_trial
-            
         
+        # create new state in q_table if explored
         if (state is not None) and (state not in self.q_table):
             # set the q-values to zero
             self.q_table[state] = {'forward': self.initial_q, 'left': self.initial_q, 
@@ -86,7 +80,7 @@ class LearningAgent(Agent):
         action = None
         
         # choose a random action epsilon percent of the time, else choose highest q-value action
-        if random.random() > epsilon: #and (self.initial_q not in self.q_table[state].values()):
+        if random.random() > epsilon:
             for a, q in self.q_table[state].iteritems():
                 if q == max(self.q_table[state].values()):
                     action = a
@@ -98,6 +92,12 @@ class LearningAgent(Agent):
         # TODO: Learn policy based on state, action, reward
         q_hat = None
         max_q = max(self.q_table[state].values())
+        
+        left = self.env.sense(self)['left']
+        right = self.env.sense(self)['right']
+        oncoming = self.env.sense(self)['oncoming']
+        # True if there's another car in the same intersection
+        car_in_int = not ((left or right or oncoming) is None)
 
         ### IMPLEMENT GAME THEORY
         # optimize the policy by implementing game theory
@@ -105,8 +105,7 @@ class LearningAgent(Agent):
         #if left or right or oncoming in ['left', 'right', 'oncoming']:
             #agent needs to find a strategy based on 
             # 1 if there's a car in the intersection
-            # 2 determining the maximin strategy in the intersection
-        
+            # 2 determine the maximin strategy in the intersection        
         ### IMPLEMENT GAME THEORY
         
         # calculate the q-value, as long as it is not in the initial state
@@ -117,21 +116,16 @@ class LearningAgent(Agent):
             
             if q_hat is not None:
                 self.q_table[self.previous_state][self.previous_action] = q_hat
-                
-            print "state: {}".format(state)
-            print "action: {}".format(action)
-            print "reward: {}".format(reward)
         
         # save previous state and action to use for q-learning equation
         self.previous_state = state
         self.previous_action = action
 
         # observing results for debugging
-        self.list_of_actions.append((action, self.light))        
         if self.env.done == True:
-            self.success_rate += 1     
+            self.success_tally += 1     
             self.successful_runs.append(self.run_trial)
-            
+
         print "LearningAgent.update(): deadline = {}, inputs = {}, action = {}, reward = {}".format(deadline, inputs, action, reward)  # [debug]
         
 
@@ -147,27 +141,22 @@ def run():
     sim = Simulator(e, update_delay=0)  # reduce update_delay to speed up simulation
     sim.run(n_trials=100)  # press Esc or close pygame window to quit    
 
-    
     def plot_success(successful_runs):
         x = range(0, 101)
         y = np.zeros(len(x))
         for x_coord in x:
             if x_coord in successful_runs:
                 y[x_coord] = 1
-        pl.figure()
         pl.title("Successful Runs")
-        pl.hist(successful_runs, 
-                bins=len(x),
-                range())
+        pl.hist(successful_runs, bins=len(x))
         pl.xlabel("Trial Run Number")
         pl.ylabel("Success (binary)")
         pl.show()
 
     print a.q_table
-    print a.list_of_actions    
-    print a.successful_runs
-    print len(a.successful_runs)
-    print plot_success(a.successful_runs)
+    print "List of trial numbers, where the agent successfully reached the destination:\n{}".format(a.successful_runs)
+    print "Number of successful runs:\n{}".format(len(a.successful_runs))
+    #print plot_success(a.successful_runs)
 
 
 if __name__ == '__main__':
