@@ -6,7 +6,8 @@ from simulator import Simulator
 # these are used to analyze the agent's results 
 import matplotlib.pyplot as pl
 import numpy as np
-import pandas as pd
+import deap
+
 
 class LearningAgent(Agent):
     """An agent that learns to drive in the smartcab world."""
@@ -16,7 +17,6 @@ class LearningAgent(Agent):
         self.color = 'red'  # override color
         self.planner = RoutePlanner(self.env, self)  # simple route planner to get next_waypoint
         
-        # TODO: Initialize any additional variables here
         # setting up the q_table
         self.q_table = {}
         self.initial_q = 4
@@ -28,7 +28,7 @@ class LearningAgent(Agent):
         self.previous_action = None
         self.previous_state = None
 
-        # these are debugging variables and for analysis
+        # these are debugging variables and for performance analysis
         self.successful_runs = []
         self.success_tally = 0
         self.run_trial = 1
@@ -41,35 +41,32 @@ class LearningAgent(Agent):
 
 
     def reset(self, destination=None):
+        # reset at end of trial
         self.planner.route_to(destination)
-        # TODO: Prepare for a new trip; reset any variables here, if required
         self.previous_action = None
         self.destination = self.planner.destination
         self.previous_state = None
         self.run_trial += 1
-        
         self.all_rewards.append(self.net_reward)
         self.net_reward = 0
         
         
     def update(self, t):
-        # Gather inputs
         self.next_waypoint = self.planner.next_waypoint()  # from route planner, also displayed by simulator
         inputs = self.env.sense(self)
         deadline = self.env.get_deadline(self)
-
-        # TODO: Update state
+        
+        # update state
         self.light = self.env.sense(self)['light']
 
         # these aren't used toward the state but will be used for experimentation
         left = self.env.sense(self)['left']
         right = self.env.sense(self)['right']
         oncoming = self.env.sense(self)['oncoming']
-        car_in_int = not ((left or right or oncoming) is None) # True if there's another car in the current intersection
 
         self.state = (self.next_waypoint, self.light)
         
-        # creating and decaying parameters
+        # equations for decaying parameters
         self.gamma = 0.82 ** self.run_trial # discount rate
         self.alpha = 1.0 / self.run_trial # learning rate
         self.epsilon = 1.0 / self.run_trial # randomness
@@ -79,8 +76,7 @@ class LearningAgent(Agent):
             self.q_table[self.state] = {'forward': self.initial_q, 'left': self.initial_q, 
                                         'right': self.initial_q, None: self.initial_q}
 
-        # TODO: Select action according to your policy
-        # choose a random action epsilon percent of the time, else choose highest q-value action
+        # choose a random action epsilon an x percent of the time, else choose highest q-value action
         if random.random() > self.epsilon:
             for a, q in self.q_table[self.state].iteritems():
                 if q == max(self.q_table[self.state].values()):
@@ -90,7 +86,7 @@ class LearningAgent(Agent):
 
         reward = self.env.act(self, action)
 
-        # TODO: Learn policy based on state, action, reward
+        # Learn policy based on state, action, reward
         q_hat = None
         max_q = max(self.q_table[self.state].values())
 
@@ -107,11 +103,12 @@ class LearningAgent(Agent):
         self.previous_state = self.state
         self.previous_action = action
 
-        # analysis for the last 10 trials
+        # analysis of the final 10 trials
         if self.run_trial > 90:
             location = self.env.agent_states[self]['location']
             destination = self.planner.destination
-            # this keeps track of the next waypoint, action, traffic light, cars in the intersection, agent's current location, and destination
+            # this keeps track of the next waypoint, action, traffic light, 
+            # cars in the intersection, agent's current location, and destination
             # at each step, during the last 10 trials
             self.last_ten_trials.append((self.next_waypoint, action, self.light, left, right, oncoming, location, destination))
             self.net_reward += reward # this is used to check the net rewards at each trial
